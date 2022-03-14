@@ -156,8 +156,16 @@ lock_create(const char *name)
 
 	HANGMAN_LOCKABLEINIT(&lock->lk_hangman, lock->lk_name);
 
-	// add stuff here as needed
-
+	lock->lk_wchan = wchan_create(lock->lk_name);
+        if(lock->lk_wchan == NULL) {
+            kfree(lock->lk_name);
+            kfree(lock);
+            return NULL;
+        }
+	
+        lock->lk_locked = false;	
+        spinlock_init(&lock->lk_spinlock);
+	
 	return lock;
 }
 
