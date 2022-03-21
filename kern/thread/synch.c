@@ -45,7 +45,7 @@
 // Semaphore.
 
 struct semaphore *
-sem_create(const char *name, int initial_count)
+sem_create(const char *name, unsigned initial_count)
 {
         struct semaphore *sem;
 
