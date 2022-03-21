@@ -1,4 +1,4 @@
-/*
+                                                                                                                                              /*
  * Copyright (c) 2000, 2001, 2002, 2003, 2004, 2005, 2008, 2009
  *	The President and Fellows of Harvard College.
  *
@@ -36,6 +36,7 @@
 
 
 #include <spinlock.h>
+#include <thread.h>
 
 /*
  * Dijkstra-style semaphore.
@@ -44,13 +45,13 @@
  * internally.
  */
 struct semaphore {
-	char *sem_name;
+        char *sem_name;
 	struct wchan *sem_wchan;
 	struct spinlock sem_lock;
-	volatile unsigned sem_count;
+        volatile int sem_count;
 };
 
-struct semaphore *sem_create(const char *name, unsigned initial_count);
+struct semaphore *sem_create(const char *name, int initial_count);
 void sem_destroy(struct semaphore *);
 
 /*
@@ -74,13 +75,14 @@ void V(struct semaphore *);
  */
 struct lock {
         char *lk_name;
-        HANGMAN_LOCKABLE(lk_hangman);   /* Deadlock detector hook. */
-        // add what you need here
-        // (don't forget to mark things volatile as needed)
+        struct thread *lk_owner;
+        struct spinlock lk_spinlock;
+        struct wchan *lk_wchan;
+        volatile bool lk_locked;          
 };
 
 struct lock *lock_create(const char *name);
-void lock_destroy(struct lock *);
+void lock_acquire(struct lock *);
 
 /*
  * Operations:
@@ -88,14 +90,14 @@ void lock_destroy(struct lock *);
  *                   same time.
  *    lock_release - Free the lock. Only the thread holding the lock may do
  *                   this.
- *    lock_do_i_hold - Return true if the current thread holds the lock;
+ *    lock_do_i_hold - Return true if the current thread holds the lock; 
  *                   false otherwise.
  *
  * These operations must be atomic. You get to write them.
  */
-void lock_acquire(struct lock *);
 void lock_release(struct lock *);
 bool lock_do_i_hold(struct lock *);
+void lock_destroy(struct lock *);
 
 
 /*
@@ -114,8 +116,9 @@ bool lock_do_i_hold(struct lock *);
 
 struct cv {
         char *cv_name;
-        // add what you need here
-        // (don't forget to mark things volatile as needed)
+        struct lock *cv_intlock;
+        struct wchan *cv_wchan;
+        struct lock *sup_lock;
 };
 
 struct cv *cv_create(const char *name);
@@ -128,7 +131,7 @@ void cv_destroy(struct cv *);
  *    cv_signal    - Wake up one thread that's sleeping on this CV.
  *    cv_broadcast - Wake up all threads sleeping on this CV.
  *
- * For all three operations, the current thread must hold the lock passed
+ * For all three operations, the current thread must hold the lock passed 
  * in. Note that under normal circumstances the same lock should be used
  * on all operations with any particular CV.
  *
@@ -139,35 +142,23 @@ void cv_signal(struct cv *cv, struct lock *lock);
 void cv_broadcast(struct cv *cv, struct lock *lock);
 
 /*
- * Reader-writer locks.
- *
- * When the lock is created, no thread should be holding it. Likewise,
- * when the lock is destroyed, no thread should be holding it.
- *
- * The name field is for easier debugging. A copy of the name is
- * (should be) made internally.
+ * 13 Feb 2012 : GWA : Reader-writer locks.
  */
 
 struct rwlock {
         char *rwlock_name;
-        // add what you need here
-        // (don't forget to mark things volatile as needed)
+        struct lock *rwlock_intlock;
+        struct wchan *rwlock_rch;
+        struct wchan *rwlock_wch;
+
+        struct thread *rwlock_writer;
+
+        volatile int readers;
+        volatile int writers;
 };
 
 struct rwlock * rwlock_create(const char *);
 void rwlock_destroy(struct rwlock *);
-
-/*
- * Operations:
- *    rwlock_acquire_read  - Get the lock for reading. Multiple threads can
- *                          hold the lock for reading at the same time.
- *    rwlock_release_read  - Free the lock. 
- *    rwlock_acquire_write - Get the lock for writing. Only one thread can
- *                           hold the write lock at one time.
- *    rwlock_release_write - Free the write lock.
- *
- * These operations must be atomic. You get to write them.
- */
 
 void rwlock_acquire_read(struct rwlock *);
 void rwlock_release_read(struct rwlock *);
